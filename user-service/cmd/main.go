@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"user-service/config"
+	"user-service/database"
 	"user-service/handler"
 	"user-service/routes"
 
@@ -14,6 +15,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
+
+	postgresDB, err := database.NewPostgres(cfg.Database)
+	if err != nil {
+		log.Fatalf("failed to connect to postgres: %v", err)
+	}
+
+	defer func() {
+		if err := postgresDB.Close(); err != nil {
+			log.Printf("failed to close postgres connection: %v", err)
+		}
+	}()
+
+	log.Printf("postgres connection established host=%s port=%s database=%s",
+		cfg.Database.Host, cfg.Database.Port, cfg.Database.Name)
 
 	router := gin.Default()
 
