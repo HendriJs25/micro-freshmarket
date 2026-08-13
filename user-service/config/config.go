@@ -21,6 +21,7 @@ const (
 type Config struct {
 	App      App
 	Database Database
+	Seed     Seed
 }
 
 type App struct {
@@ -37,6 +38,12 @@ type Database struct {
 	SSLMode      string
 	MaxOpenConns int
 	MaxIdleConns int
+}
+
+type Seed struct {
+	AdminName     string
+	AdminEmail    string
+	AdminPassword string
 }
 
 func Load() (*Config, error) {
@@ -64,6 +71,11 @@ func Load() (*Config, error) {
 			SSLMode:      getEnv("DATABASE_SSL_MODE", defaultDatabaseSSLMode),
 			MaxOpenConns: maxOpenConns,
 			MaxIdleConns: maxIdleConns,
+		},
+		Seed: Seed{
+			AdminName:     getEnv("SEED_ADMIN_NAME", ""),
+			AdminEmail:    getEnv("SEED_ADMIN_EMAIL", ""),
+			AdminPassword: getEnv("SEED_ADMIN_PASSWORD", ""),
 		},
 	}
 
@@ -135,6 +147,30 @@ func validatePort(key, value string) error {
 
 	if port < 1 || port > 65535 {
 		return fmt.Errorf("%s must be between 1 and 65535", key)
+	}
+
+	return nil
+}
+
+func (c *Config) ValidateSeed() error {
+	if strings.TrimSpace(c.Seed.AdminName) == "" {
+		return fmt.Errorf("SEED_ADMIN_NAME should not be empty")
+	}
+
+	if strings.TrimSpace(c.Seed.AdminEmail) == "" {
+		return fmt.Errorf("SEED_ADMIN_EMAIL should not be empty")
+	}
+
+	if strings.TrimSpace(c.Seed.AdminPassword) == "" {
+		return fmt.Errorf("SEED_ADMIN_PASSWORD should not be empty")
+	}
+
+	if len(c.Seed.AdminPassword) < 8 {
+		return fmt.Errorf("SEED_ADMIN_PASSWORD should not be less than 8")
+	}
+
+	if len(c.Seed.AdminPassword) > 72 {
+		return fmt.Errorf("SEED_ADMIN_PASSWORD should not be more than 72")
 	}
 
 	return nil
