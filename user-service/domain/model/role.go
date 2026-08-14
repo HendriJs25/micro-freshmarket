@@ -13,7 +13,7 @@ type Role struct {
 	UpdatedAt *time.Time
 	DeletedAt gorm.DeletedAt
 
-	Users []User `gorm:"many2many:user_role;"`
+	Users []User `gorm:"many2many:userrole;"`
 }
 
 func (Role) TableName() string {
