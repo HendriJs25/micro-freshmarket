@@ -12,6 +12,6 @@ type Registry struct {
 func NewRegistry(repositories *repository.Registry) *Registry {
 	return &Registry{
 		User: userService.NewService(
-			repositories.User),
+			repositories.User, repositories.Transaction),
 	}
 }

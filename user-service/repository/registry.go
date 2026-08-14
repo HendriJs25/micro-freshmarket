@@ -14,6 +14,7 @@ type Registry struct {
 	Role              role.Repository
 	UserRole          userrole.Repository
 	VerificationToken verificationtoken.Repository
+	Transaction       TransactionManager
 }
 
 func NewRegistry(db *gorm.DB) *Registry {
@@ -22,5 +23,6 @@ func NewRegistry(db *gorm.DB) *Registry {
 		Role:              role.NewRepository(db),
 		UserRole:          userrole.NewRepository(db),
 		VerificationToken: verificationtoken.NewRepository(db),
+		Transaction:       NewTransactionManager(db),
 	}
 }
