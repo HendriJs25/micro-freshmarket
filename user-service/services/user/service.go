@@ -2,10 +2,15 @@ package user
 
 import (
 	"context"
+	"crypto/rand"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 	apperror "user-service/common/error"
+	"user-service/constants"
 	"user-service/domain/model"
+	"user-service/repository"
 	userRepository "user-service/repository/user"
 
 	"golang.org/x/crypto/bcrypt"
@@ -13,28 +18,32 @@ import (
 
 const (
 	minPasswordLength = 8
-	maxPasswordLenght = 72
+	maxPasswordLength = 72
+
+	emailVerificationTokenTTL = 24 * time.Hour
 )
 
-type CreateInput struct {
+type SignUpInput struct {
 	Name     string
 	Email    string
 	Password string
 }
 
 type service struct {
-	userRepository userRepository.Repository
+	userRepository     userRepository.Repository
+	transactionManager repository.TransactionManager
 }
 
 type Service interface {
 	GetByID(context.Context, int64) (*model.User, error)
 	GetByEmail(context.Context, string) (*model.User, error)
-	Create(context.Context, CreateInput) (*model.User, error)
+	SignUp(context.Context, SignUpInput) error
 }
 
-func NewService(userRepository userRepository.Repository) Service {
+func NewService(userRepository userRepository.Repository, transactionManager repository.TransactionManager) Service {
 	return &service{
-		userRepository: userRepository,
+		userRepository:     userRepository,
+		transactionManager: transactionManager,
 	}
 }
 
@@ -66,39 +75,86 @@ func (s *service) GetByEmail(ctx context.Context, email string) (*model.User, er
 	return user, nil
 }
 
-func (s *service) Create(ctx context.Context, input CreateInput) (*model.User, error) {
+func (s *service) SignUp(ctx context.Context, input SignUpInput) error {
 	name := strings.TrimSpace(input.Name)
 	email := normalizeEmail(input.Email)
 
 	if name == "" {
-		return nil, fmt.Errorf("%w: user name must not be empty", apperror.ErrInvalidArgument)
+		return fmt.Errorf("%w: user name must not be empty", apperror.ErrInvalidArgument)
 	}
 
 	if email == "" {
-		return nil, fmt.Errorf("%w: user email must not be empty", apperror.ErrInvalidArgument)
+		return fmt.Errorf("%w: user email must not be empty", apperror.ErrInvalidArgument)
 	}
 
 	if err := validatePassword(input.Password); err != nil {
-		return nil, err
+		return err
 	}
 
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, fmt.Errorf("hash user password: %w", err)
+		return fmt.Errorf("hash user password: %w", err)
 	}
 
-	user := &model.User{
-		Name:         name,
-		Email:        email,
-		PasswordHash: string(passwordHash),
-		IsVerified:   false,
+	verificationToken := generateVerificationToken()
+
+	expiresAt := time.Now().UTC().Add(emailVerificationTokenTTL)
+
+	err = s.transactionManager.WithinTransaction(ctx, func(repositories *repository.Registry) error {
+		customerRole, err := repositories.Role.FindByName(ctx, constants.RoleCustomer)
+		if err != nil {
+			if errors.Is(err, apperror.ErrNotFound) {
+				return fmt.Errorf("%w: required role %q not found", apperror.ErrMisconfigured, constants.RoleCustomer)
+			}
+			return fmt.Errorf("find customer role: %w", err)
+		}
+
+		user := &model.User{
+			Name:         name,
+			Email:        email,
+			PasswordHash: string(passwordHash),
+			IsVerified:   false,
+		}
+
+		if err := repositories.User.Create(ctx, user); err != nil {
+			return fmt.Errorf("create signup user: %w", err)
+		}
+
+		userRole := &model.UserRole{
+			UserID: user.ID,
+			RoleID: customerRole.ID,
+		}
+
+		if err := repositories.UserRole.Create(ctx, userRole); err != nil {
+			return fmt.Errorf("assign customer role: %w", err)
+		}
+
+		token := &model.VerificationToken{
+			UserID:    user.ID,
+			Token:     verificationToken,
+			TokenType: constants.TokenTypeEmailVerification,
+			ExpiresAt: expiresAt,
+		}
+
+		if err := repositories.VerificationToken.Create(ctx, token); err != nil {
+			if errors.Is(err, apperror.ErrAlreadyExists) {
+				return fmt.Errorf("generated verification token already exists")
+			}
+			return fmt.Errorf("create verification token: %w", err)
+		}
+
+		return nil
+
+	})
+
+	if err != nil {
+		return fmt.Errorf("sign up user: %w", err)
 	}
 
-	if err := s.userRepository.Create(ctx, user); err != nil {
-		return nil, fmt.Errorf("create user: %w", err)
-	}
-
-	return user, nil
+	return nil
+}
+func generateVerificationToken() string {
+	return rand.Text()
 }
 
 func normalizeEmail(email string) string {
@@ -112,8 +168,8 @@ func validatePassword(password string) error {
 		return fmt.Errorf("%w: password must be at least %d bytes", apperror.ErrInvalidArgument, minPasswordLength)
 	}
 
-	if passwordLength > maxPasswordLenght {
-		return fmt.Errorf("%w: password must not exceed %d bytes", apperror.ErrInvalidArgument, maxPasswordLenght)
+	if passwordLength > maxPasswordLength {
+		return fmt.Errorf("%w: password must not exceed %d bytes", apperror.ErrInvalidArgument, maxPasswordLength)
 	}
 
 	return nil
