@@ -24,6 +24,7 @@ func NewPostgres(cfg config.Database) (*Postgres, error) {
 	gormDB, err := gorm.Open(postgres.Open(buildPostgresURL(cfg)),
 		&gorm.Config{
 			DisableAutomaticPing: true,
+			TranslateError:       true,
 		},
 	)
 
