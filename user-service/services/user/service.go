@@ -23,6 +23,16 @@ const (
 	emailVerificationTokenTTL = time.Hour
 )
 
+type AuthenticateInput struct {
+	Email    string
+	Password string
+}
+
+type AuthenticatedUser struct {
+	ID    int64
+	Name  string
+	Email string
+}
 type SignUpInput struct {
 	Name     string
 	Email    string
@@ -39,6 +49,7 @@ type Service interface {
 	GetByEmail(context.Context, string) (*model.User, error)
 	SignUp(context.Context, SignUpInput) error
 	VerifyAccount(context.Context, string) error
+	Authenticate(context.Context, AuthenticateInput) (*AuthenticatedUser, error)
 }
 
 func NewService(userRepository userRepository.Repository, transactionManager repository.TransactionManager) Service {
@@ -199,6 +210,41 @@ func (s *service) VerifyAccount(ctx context.Context, token string) error {
 		return fmt.Errorf("verify account: %w", err)
 	}
 	return nil
+}
+
+func (s *service) Authenticate(ctx context.Context, input AuthenticateInput) (*AuthenticatedUser, error) {
+	email := normalizeEmail(input.Email)
+
+	if email == "" || input.Password == "" {
+		return nil, fmt.Errorf("%w: email and password must not be empty", apperror.ErrInvalidCredentials)
+	}
+
+	user, err := s.userRepository.FindByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, apperror.ErrNotFound) {
+			return nil, fmt.Errorf("%w", apperror.ErrInvalidCredentials)
+		}
+		return nil, fmt.Errorf("find authentication user: %w", err)
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(input.Password))
+	if err != nil {
+		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			return nil, fmt.Errorf("%w", apperror.ErrInvalidCredentials)
+		}
+
+		return nil, fmt.Errorf("compare user password hash: %w", err)
+	}
+
+	if !user.IsVerified {
+		return nil, fmt.Errorf("%w", apperror.ErrAccountNotVerified)
+	}
+
+	return &AuthenticatedUser{
+		ID:    user.ID,
+		Name:  user.Name,
+		Email: user.Email,
+	}, nil
 }
 
 func generateVerificationToken() string {

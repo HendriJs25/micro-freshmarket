@@ -10,4 +10,7 @@ var (
 
 	ErrInvalidToken = errors.New("invalid token")
 	ErrTokenExpired = errors.New("token expired")
+
+	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrAccountNotVerified = errors.New("account not verified")
 )
