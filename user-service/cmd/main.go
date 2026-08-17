@@ -10,7 +10,9 @@ import (
 	"user-service/database"
 	"user-service/database/seeders"
 	"user-service/handler"
+	"user-service/repository"
 	"user-service/routes"
+	"user-service/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -64,10 +66,11 @@ func run(seed bool) error {
 
 	}
 
+	repositoryRegistry := repository.NewRegistry(postgresDB.DB)
+	serviceRegistry := services.NewRegistry(repositoryRegistry)
+	handlerRegistry := handler.NewRegistry(serviceRegistry)
+
 	router := gin.Default()
-
-	handlerRegistry := handler.NewRegistry()
-
 	routeRegistry := routes.NewRegistry(router, handlerRegistry)
 	routeRegistry.Register()
 
