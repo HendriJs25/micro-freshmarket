@@ -18,6 +18,7 @@ type Repository interface {
 	FindByID(context.Context, int64) (*model.User, error)
 	FindByEmail(context.Context, string) (*model.User, error)
 	Create(context.Context, *model.User) error
+	MarkVerified(context.Context, int64) error
 }
 
 func NewRepository(db *gorm.DB) Repository {
@@ -62,6 +63,19 @@ func (r repository) Create(ctx context.Context, user *model.User) error {
 			return fmt.Errorf("create user: %w", apperror.ErrAlreadyExists)
 		}
 		return fmt.Errorf("create user: %w", err)
+	}
+	return nil
+}
+
+func (r repository) MarkVerified(ctx context.Context, id int64) error {
+	result := r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", id).Update("is_verified", true)
+
+	if result.Error != nil {
+		return fmt.Errorf("mark verified user by id: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("mark verified user: %w", apperror.ErrNotFound)
 	}
 	return nil
 }

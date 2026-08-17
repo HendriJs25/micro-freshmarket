@@ -20,7 +20,7 @@ const (
 	minPasswordLength = 8
 	maxPasswordLength = 72
 
-	emailVerificationTokenTTL = 24 * time.Hour
+	emailVerificationTokenTTL = time.Hour
 )
 
 type SignUpInput struct {
