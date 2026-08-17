@@ -38,6 +38,7 @@ type Service interface {
 	GetByID(context.Context, int64) (*model.User, error)
 	GetByEmail(context.Context, string) (*model.User, error)
 	SignUp(context.Context, SignUpInput) error
+	VerifyAccount(context.Context, string) error
 }
 
 func NewService(userRepository userRepository.Repository, transactionManager repository.TransactionManager) Service {
@@ -153,6 +154,53 @@ func (s *service) SignUp(ctx context.Context, input SignUpInput) error {
 
 	return nil
 }
+
+func (s *service) VerifyAccount(ctx context.Context, token string) error {
+	token = strings.TrimSpace(token)
+
+	if token == "" {
+		return fmt.Errorf("%w: verification token must not be empty", apperror.ErrInvalidToken)
+	}
+
+	err := s.transactionManager.WithinTransaction(ctx, func(repositories *repository.Registry) error {
+		verificationToken, err := repositories.VerificationToken.FindByToken(ctx, token)
+		if err != nil {
+			if errors.Is(err, apperror.ErrNotFound) {
+				return fmt.Errorf("%w: verification token not found", apperror.ErrInvalidToken)
+			}
+			return fmt.Errorf("find verification token: %w", err)
+		}
+
+		if verificationToken.TokenType != constants.TokenTypeEmailVerification {
+			return fmt.Errorf("%w: unexpected verification token type", apperror.ErrInvalidToken)
+		}
+
+		now := time.Now().UTC()
+
+		if !now.Before(verificationToken.ExpiresAt) {
+			return fmt.Errorf("%w: verification token has expired", apperror.ErrInvalidToken)
+		}
+
+		if err := repositories.User.MarkVerified(ctx, verificationToken.UserID); err != nil {
+			return fmt.Errorf("verify token user: %w", err)
+		}
+
+		if err := repositories.VerificationToken.DeleteByID(ctx, verificationToken.ID); err != nil {
+			if errors.Is(err, apperror.ErrNotFound) {
+				return fmt.Errorf("%w: verification token already used", apperror.ErrInvalidToken)
+			}
+			return fmt.Errorf("invalidate verification token: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("verify account: %w", err)
+	}
+	return nil
+}
+
 func generateVerificationToken() string {
 	return rand.Text()
 }
