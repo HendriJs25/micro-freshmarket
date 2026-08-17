@@ -40,9 +40,9 @@ func (r *repository) Create(ctx context.Context, token *model.VerificationToken)
 }
 
 func (r *repository) FindByToken(ctx context.Context, token string) (*model.VerificationToken, error) {
-	var verificationToken *model.VerificationToken
+	var verificationToken model.VerificationToken
 
-	err := r.db.WithContext(ctx).Where("token = ?", token).First(verificationToken).Error
+	err := r.db.WithContext(ctx).Where("token = ?", token).First(&verificationToken).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("find verification token: %w", apperror.ErrNotFound)
@@ -50,7 +50,7 @@ func (r *repository) FindByToken(ctx context.Context, token string) (*model.Veri
 		return nil, fmt.Errorf("find verification token: %w", err)
 	}
 
-	return verificationToken, nil
+	return &verificationToken, nil
 }
 
 func (r *repository) DeleteByID(ctx context.Context, id int64) error {
