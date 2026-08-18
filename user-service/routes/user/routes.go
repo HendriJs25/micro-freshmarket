@@ -9,4 +9,5 @@ import (
 func Register(router gin.IRouter, handler *userhandler.Handler) {
 	router.POST("/signup", handler.SignUp)
 	router.GET("/verify-account", handler.VerifyAccount)
+	router.POST("/signin", handler.SignIn)
 }

@@ -11,7 +11,10 @@ import (
 	"user-service/constants"
 	"user-service/domain/model"
 	"user-service/repository"
-	userRepository "user-service/repository/user"
+	rolerepository "user-service/repository/role"
+	sessionrepository "user-service/repository/session"
+	userrepository "user-service/repository/user"
+	jwtservice "user-service/services/jwt"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -32,6 +35,9 @@ type AuthenticatedUser struct {
 	ID    int64
 	Name  string
 	Email string
+	Phone string
+	Lat   string
+	Lng   string
 }
 type SignUpInput struct {
 	Name     string
@@ -39,9 +45,25 @@ type SignUpInput struct {
 	Password string
 }
 
+type SignInInput struct {
+	Email    string
+	Password string
+}
+
+type SignInResult struct {
+	AccessToken string
+	RoleName    string
+	User        AuthenticatedUser
+}
+
 type service struct {
-	userRepository     userRepository.Repository
+	userRepository userrepository.Repository
+	roleRepository rolerepository.Repository
+
 	transactionManager repository.TransactionManager
+
+	jwtService        jwtservice.Service
+	sessionRepository sessionrepository.Repository
 }
 
 type Service interface {
@@ -50,12 +72,20 @@ type Service interface {
 	SignUp(context.Context, SignUpInput) error
 	VerifyAccount(context.Context, string) error
 	Authenticate(context.Context, AuthenticateInput) (*AuthenticatedUser, error)
+	SignIn(context.Context, SignInInput) (*SignInResult, error)
 }
 
-func NewService(userRepository userRepository.Repository, transactionManager repository.TransactionManager) Service {
+func NewService(userRepository userrepository.Repository,
+	roleRepository rolerepository.Repository,
+	transactionManager repository.TransactionManager,
+	jwtService jwtservice.Service,
+	sessionRepository sessionrepository.Repository) Service {
 	return &service{
 		userRepository:     userRepository,
+		roleRepository:     roleRepository,
 		transactionManager: transactionManager,
+		jwtService:         jwtService,
+		sessionRepository:  sessionRepository,
 	}
 }
 
@@ -244,6 +274,67 @@ func (s *service) Authenticate(ctx context.Context, input AuthenticateInput) (*A
 		ID:    user.ID,
 		Name:  user.Name,
 		Email: user.Email,
+		Phone: stringValue(user.Phone),
+		Lat:   stringValue(user.Lat),
+		Lng:   stringValue(user.Lng),
+	}, nil
+}
+
+func (s *service) SignIn(ctx context.Context, input SignInInput) (*SignInResult, error) {
+	authenticatedUser, err := s.Authenticate(ctx, AuthenticateInput{
+		Email:    input.Email,
+		Password: input.Password,
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("authenticate sign in: %w", err)
+	}
+
+	roles, err := s.roleRepository.FindByUserID(ctx, authenticatedUser.ID)
+
+	if err != nil {
+		if errors.Is(err, apperror.ErrNotFound) {
+			return nil, fmt.Errorf("%w: user %d has no active role", apperror.ErrMisconfigured, authenticatedUser.ID)
+		}
+		return nil, fmt.Errorf("find sign-in user roles: %w", err)
+	}
+
+	if len(roles) != 1 {
+		return nil, fmt.Errorf("%w: user %d must have exactly one role", apperror.ErrMisconfigured, authenticatedUser.ID)
+	}
+
+	roleName := roles[0].Name
+
+	accessToken, err := s.jwtService.GenerateAccessToken(authenticatedUser.ID)
+
+	if err != nil {
+		return nil, fmt.Errorf("generate sign-in access token: %w", err)
+	}
+
+	sessionCreatedAt := time.Now().UTC()
+
+	sessionTTL := accessToken.ExpiresAt.Sub(sessionCreatedAt)
+
+	if sessionTTL <= 0 {
+		return nil, fmt.Errorf("generated access token is expired")
+	}
+
+	session := model.Session{
+		UserID:    authenticatedUser.ID,
+		Name:      authenticatedUser.Name,
+		Email:     authenticatedUser.Email,
+		RoleName:  roleName,
+		CreatedAt: sessionCreatedAt,
+	}
+
+	if err := s.sessionRepository.Set(ctx, accessToken.Value, session, sessionTTL); err != nil {
+		return nil, fmt.Errorf("create sign-in session: %w", err)
+	}
+
+	return &SignInResult{
+		AccessToken: accessToken.Value,
+		RoleName:    roleName,
+		User:        *authenticatedUser,
 	}, nil
 }
 
@@ -267,4 +358,11 @@ func validatePassword(password string) error {
 	}
 
 	return nil
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }

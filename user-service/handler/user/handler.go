@@ -7,6 +7,7 @@ import (
 	apperror "user-service/common/error"
 	"user-service/common/response"
 	"user-service/domain/dto/request"
+	responsedto "user-service/domain/dto/response"
 	userservice "user-service/services/user"
 
 	"github.com/gin-gonic/gin"
@@ -70,6 +71,63 @@ func (h *Handler) VerifyAccount(c *gin.Context) {
 		Message: "success",
 		Data:    nil,
 	})
+}
+
+func (h *Handler) SignIn(c *gin.Context) {
+	var req request.SignInRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, response.Response{
+			Message: "invalid sign-in request",
+			Data:    nil,
+		})
+		return
+	}
+
+	result, err := h.userService.SignIn(c.Request.Context(), userservice.SignInInput{
+		Email:    req.Email,
+		Password: req.Password,
+	})
+
+	if err != nil {
+		h.respondSignInError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.Response{
+		Message: "success",
+		Data: responsedto.SignInResponse{
+			AccessToken: result.AccessToken,
+			Role:        result.RoleName,
+			ID:          result.User.ID,
+			Name:        result.User.Name,
+			Email:       result.User.Email,
+			Phone:       result.User.Phone,
+			Lat:         result.User.Lat,
+			Lng:         result.User.Lng,
+		},
+	})
+}
+
+func (h *Handler) respondSignInError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, apperror.ErrInvalidCredentials):
+		c.JSON(http.StatusUnauthorized, response.Response{
+			Message: "invalid email or password",
+			Data:    nil,
+		})
+	case errors.Is(err, apperror.ErrAccountNotVerified):
+		c.JSON(http.StatusForbidden, response.Response{
+			Message: "account not verified",
+			Data:    nil,
+		})
+	default:
+		log.Printf("sign in failed: %v", err)
+		c.JSON(http.StatusInternalServerError, response.Response{
+			Message: "internal server error",
+			Data:    nil,
+		})
+	}
 }
 
 func (h *Handler) respondSignUpError(c *gin.Context, err error) {

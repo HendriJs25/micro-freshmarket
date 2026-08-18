@@ -11,6 +11,7 @@ import (
 	"user-service/database/seeders"
 	"user-service/handler"
 	"user-service/repository"
+	sessionrepository "user-service/repository/session"
 	"user-service/routes"
 	"user-service/services"
 
@@ -78,9 +79,9 @@ func run(seed bool) error {
 	}()
 
 	log.Printf("redis connection established host=%s port=%s database=%d", cfg.Redis.Host, cfg.Redis.Port, cfg.Redis.DB)
-
+	sessionRepository := sessionrepository.NewRepository(redisDB.Client)
 	repositoryRegistry := repository.NewRegistry(postgresDB.DB)
-	serviceRegistry, err := services.NewRegistry(repositoryRegistry, cfg.JWT)
+	serviceRegistry, err := services.NewRegistry(repositoryRegistry, cfg.JWT, sessionRepository)
 	if err != nil {
 		return fmt.Errorf("initialize services :%w", err)
 	}
