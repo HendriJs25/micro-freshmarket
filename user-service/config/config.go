@@ -20,6 +20,10 @@ const (
 
 	defaultJWTAccessTokenTTL = 24 * time.Hour
 	minimumJWTSecretBytes    = 32
+
+	defaultRedisHost = "localhost"
+	defaultRedisPort = "6379"
+	defaultRedisDB   = 0
 )
 
 type Config struct {
@@ -27,6 +31,7 @@ type Config struct {
 	Database Database
 	Seed     Seed
 	JWT      JWT
+	Redis    Redis
 }
 
 type App struct {
@@ -57,6 +62,13 @@ type JWT struct {
 	AccessTokenTTL time.Duration
 }
 
+type Redis struct {
+	Host     string
+	Port     string
+	Password string
+	DB       int
+}
+
 func Load() (*Config, error) {
 	maxOpenConns, err := getEnvInt("DATABASE_MAX_OPEN_CONNECTIONS", defaultDatabaseMaxOpenConns)
 	if err != nil {
@@ -69,6 +81,11 @@ func Load() (*Config, error) {
 	}
 
 	accessTokenTTL, err := getEnvDuration("JWT_ACCESS_TOKEN_TTL", defaultJWTAccessTokenTTL)
+	if err != nil {
+		return nil, err
+	}
+
+	redisDB, err := getEnvInt("REDIS_DB", defaultRedisDB)
 	if err != nil {
 		return nil, err
 	}
@@ -97,6 +114,12 @@ func Load() (*Config, error) {
 			SecretKey:      getEnv("JWT_SECRET_KEY", ""),
 			Issuer:         getEnv("JWT_ISSUER", ""),
 			AccessTokenTTL: accessTokenTTL,
+		},
+		Redis: Redis{
+			Host:     getEnv("REDIS_HOST", defaultRedisHost),
+			Port:     getEnv("REDIS_PORT", defaultRedisPort),
+			Password: getEnv("REDIS_PASSWORD", ""),
+			DB:       redisDB,
 		},
 	}
 
@@ -208,6 +231,22 @@ func (j JWT) Validate() error {
 
 	if j.AccessTokenTTL <= 0 {
 		return fmt.Errorf("JWT_ACCESS_TOKEN_TTL must be greater than zero")
+	}
+
+	return nil
+}
+
+func (r Redis) Validate() error {
+	if strings.TrimSpace(r.Host) == "" {
+		return fmt.Errorf("REDIS_HOST must not be empty")
+	}
+
+	if err := validatePort("REDIS_PORT", r.Port); err != nil {
+		return err
+	}
+
+	if r.DB < 0 {
+		return fmt.Errorf("REDIS_DB must not be negative")
 	}
 
 	return nil

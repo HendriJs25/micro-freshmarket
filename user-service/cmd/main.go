@@ -66,6 +66,19 @@ func run(seed bool) error {
 
 	}
 
+	redisDB, err := database.NewRedis(cfg.Redis)
+	if err != nil {
+		return fmt.Errorf("connect to redis: %w", err)
+	}
+
+	defer func() {
+		if err := redisDB.Close(); err != nil {
+			log.Printf("failed to close redis connection: %v", err)
+		}
+	}()
+
+	log.Printf("redis connection established host=%s port=%s database=%d", cfg.Redis.Host, cfg.Redis.Port, cfg.Redis.DB)
+
 	repositoryRegistry := repository.NewRegistry(postgresDB.DB)
 	serviceRegistry, err := services.NewRegistry(repositoryRegistry, cfg.JWT)
 	if err != nil {
