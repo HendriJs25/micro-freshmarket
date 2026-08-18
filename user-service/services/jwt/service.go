@@ -17,6 +17,11 @@ type AccessTokenClaims struct {
 	ExpiresAt time.Time
 }
 
+type AccessToken struct {
+	Value     string
+	ExpiresAt time.Time
+}
+
 type claims struct {
 	UserID int64 `json:"user_id"`
 
@@ -30,7 +35,7 @@ type service struct {
 }
 
 type Service interface {
-	GenerateAccessToken(int64) (string, error)
+	GenerateAccessToken(int64) (*AccessToken, error)
 	ValidateAccessToken(string) (*AccessTokenClaims, error)
 }
 
@@ -46,19 +51,21 @@ func NewService(cfg config.JWT) (Service, error) {
 	}, nil
 }
 
-func (s *service) GenerateAccessToken(userID int64) (string, error) {
+func (s *service) GenerateAccessToken(userID int64) (*AccessToken, error) {
 	if userID <= 0 {
-		return "", fmt.Errorf("%w:user id must be greater than zero", apperror.ErrInvalidArgument)
+		return nil, fmt.Errorf("%w:user id must be greater than zero", apperror.ErrInvalidArgument)
 	}
 
 	now := time.Now().UTC()
+
+	expiresAt := now.Add(s.accessTokenTTL)
 
 	tokenClaims := claims{
 		UserID: userID,
 		RegisteredClaims: jwtlib.RegisteredClaims{
 			Issuer:    s.issuer,
 			IssuedAt:  jwtlib.NewNumericDate(now),
-			ExpiresAt: jwtlib.NewNumericDate(now.Add(s.accessTokenTTL)),
+			ExpiresAt: jwtlib.NewNumericDate(expiresAt),
 		},
 	}
 
@@ -67,10 +74,13 @@ func (s *service) GenerateAccessToken(userID int64) (string, error) {
 	tokenString, err := token.SignedString(s.secretKey)
 
 	if err != nil {
-		return "", fmt.Errorf("sign access token: %w", err)
+		return nil, fmt.Errorf("sign access token: %w", err)
 	}
 
-	return tokenString, nil
+	return &AccessToken{
+		Value:     tokenString,
+		ExpiresAt: expiresAt,
+	}, nil
 }
 
 func (s *service) ValidateAccessToken(accessToken string) (*AccessTokenClaims, error) {
