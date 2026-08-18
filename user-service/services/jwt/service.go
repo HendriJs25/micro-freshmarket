@@ -53,7 +53,7 @@ func NewService(cfg config.JWT) (Service, error) {
 
 func (s *service) GenerateAccessToken(userID int64) (*AccessToken, error) {
 	if userID <= 0 {
-		return "", fmt.Errorf("%w:user id must be greater than zero", apperror.ErrInvalidArgument)
+		return nil, fmt.Errorf("%w:user id must be greater than zero", apperror.ErrInvalidArgument)
 	}
 
 	now := time.Now().UTC()
@@ -74,7 +74,7 @@ func (s *service) GenerateAccessToken(userID int64) (*AccessToken, error) {
 	tokenString, err := token.SignedString(s.secretKey)
 
 	if err != nil {
-		return "", fmt.Errorf("sign access token: %w", err)
+		return nil, fmt.Errorf("sign access token: %w", err)
 	}
 
 	return &AccessToken{
