@@ -67,7 +67,10 @@ func run(seed bool) error {
 	}
 
 	repositoryRegistry := repository.NewRegistry(postgresDB.DB)
-	serviceRegistry := services.NewRegistry(repositoryRegistry)
+	serviceRegistry, err := services.NewRegistry(repositoryRegistry, cfg.JWT)
+	if err != nil {
+		return fmt.Errorf("initialize services :%w", err)
+	}
 	handlerRegistry := handler.NewRegistry(serviceRegistry)
 
 	router := gin.Default()
