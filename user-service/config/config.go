@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -16,12 +17,16 @@ const (
 	defaultDatabaseSSLMode      = "disable"
 	defaultDatabaseMaxOpenConns = 10
 	defaultDatabaseMaxIdleConns = 5
+
+	defaultJWTAccessTokenTTL = 24 * time.Hour
+	minimumJWTSecretBytes    = 32
 )
 
 type Config struct {
 	App      App
 	Database Database
 	Seed     Seed
+	JWT      JWT
 }
 
 type App struct {
@@ -46,6 +51,12 @@ type Seed struct {
 	AdminPassword string
 }
 
+type JWT struct {
+	SecretKey      string
+	Issuer         string
+	AccessTokenTTL time.Duration
+}
+
 func Load() (*Config, error) {
 	maxOpenConns, err := getEnvInt("DATABASE_MAX_OPEN_CONNECTIONS", defaultDatabaseMaxOpenConns)
 	if err != nil {
@@ -53,6 +64,11 @@ func Load() (*Config, error) {
 	}
 
 	maxIdleConns, err := getEnvInt("DATABASE_MAX_IDLE_CONNECTIONS", defaultDatabaseMaxIdleConns)
+	if err != nil {
+		return nil, err
+	}
+
+	accessTokenTTL, err := getEnvDuration("JWT_ACCESS_TOKEN_TTL", defaultJWTAccessTokenTTL)
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +92,11 @@ func Load() (*Config, error) {
 			AdminName:     getEnv("SEED_ADMIN_NAME", ""),
 			AdminEmail:    getEnv("SEED_ADMIN_EMAIL", ""),
 			AdminPassword: getEnv("SEED_ADMIN_PASSWORD", ""),
+		},
+		JWT: JWT{
+			SecretKey:      getEnv("JWT_SECRET_KEY", ""),
+			Issuer:         getEnv("JWT_ISSUER", ""),
+			AccessTokenTTL: accessTokenTTL,
 		},
 	}
 
@@ -176,6 +197,22 @@ func (c *Config) ValidateSeed() error {
 	return nil
 }
 
+func (j JWT) Validate() error {
+	if len([]byte(j.SecretKey)) < minimumJWTSecretBytes {
+		return fmt.Errorf("JWT_SECRET_KEY must be at least % bytes", minimumJWTSecretBytes)
+	}
+
+	if strings.TrimSpace(j.Issuer) == "" {
+		return fmt.Errorf("JWT_ISSUER must not be empty")
+	}
+
+	if j.AccessTokenTTL <= 0 {
+		return fmt.Errorf("JWT_ACCESS_TOKEN_TTL must be greater than zero")
+	}
+
+	return nil
+}
+
 func getEnv(key, fallback string) string {
 	value, exists := os.LookupEnv(key)
 	if !exists {
@@ -198,4 +235,18 @@ func getEnvInt(key string, fallback int) (int, error) {
 	}
 
 	return valueInt, nil
+}
+
+func getEnvDuration(key string, fallback time.Duration) (time.Duration, error) {
+	value, exists := os.LookupEnv(key)
+	if !exists {
+		return fallback, nil
+	}
+
+	result, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a valid duration: %w", key, err)
+	}
+
+	return result, nil
 }
