@@ -56,6 +56,18 @@ type SignInResult struct {
 	User        AuthenticatedUser
 }
 
+type Profile struct {
+	ID       int64
+	RoleName string
+	Name     string
+	Email    string
+	Phone    string
+	Lat      string
+	Lng      string
+	Address  string
+	Photo    string
+}
+
 type service struct {
 	userRepository userrepository.Repository
 	roleRepository rolerepository.Repository
@@ -73,6 +85,7 @@ type Service interface {
 	VerifyAccount(context.Context, string) error
 	Authenticate(context.Context, AuthenticateInput) (*AuthenticatedUser, error)
 	SignIn(context.Context, SignInInput) (*SignInResult, error)
+	GetProfile(context.Context, int64) (*Profile, error)
 }
 
 func NewService(userRepository userrepository.Repository,
@@ -335,6 +348,42 @@ func (s *service) SignIn(ctx context.Context, input SignInInput) (*SignInResult,
 		AccessToken: accessToken.Value,
 		RoleName:    roleName,
 		User:        *authenticatedUser,
+	}, nil
+}
+
+func (s *service) GetProfile(ctx context.Context, userID int64) (*Profile, error) {
+	if userID <= 0 {
+		return nil, fmt.Errorf("%w: profile user id must be greater than zero", apperror.ErrInvalidArgument)
+	}
+
+	user, err := s.userRepository.FindByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get profile user: %w", err)
+	}
+
+	if !user.IsVerified {
+		return nil, fmt.Errorf("%w: user %d is not verified", apperror.ErrAccountNotVerified, user.ID)
+	}
+
+	roles, err := s.roleRepository.FindByUserID(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("get profile user roles: %w", err)
+	}
+
+	if len(roles) != 1 {
+		return nil, fmt.Errorf("%w: profile user %d must have exactly one role", apperror.ErrMisconfigured, user.ID)
+	}
+
+	return &Profile{
+		ID:       user.ID,
+		RoleName: roles[0].Name,
+		Name:     user.Name,
+		Email:    user.Email,
+		Phone:    stringValue(user.Phone),
+		Lat:      stringValue(user.Lat),
+		Lng:      stringValue(user.Lng),
+		Address:  stringValue(user.Address),
+		Photo:    stringValue(user.Photo),
 	}, nil
 }
 
