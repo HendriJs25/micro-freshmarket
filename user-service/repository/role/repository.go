@@ -15,12 +15,46 @@ type repository struct {
 }
 
 type Repository interface {
+	FindAll(context.Context, string) ([]model.Role, error)
+	FindByID(context.Context, int64) (*model.Role, error)
 	FindByName(context.Context, string) (*model.Role, error)
 	FindByUserID(context.Context, int64) ([]model.Role, error)
 }
 
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
+}
+
+func (r *repository) FindAll(ctx context.Context, search string) ([]model.Role, error) {
+	var roles []model.Role
+
+	query := r.db.WithContext(ctx).Model(&model.Role{})
+
+	if search != "" {
+		query = query.Where("name ILIKE ?", "%"+search+"%")
+	}
+
+	if err := query.Order("id asc").Find(&roles).Error; err != nil {
+		return nil, fmt.Errorf("find roles: %w", err)
+	}
+
+	return roles, nil
+}
+
+func (r *repository) FindByID(ctx context.Context, id int64) (*model.Role, error) {
+	var role model.Role
+
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&role).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("find role by id: %w", apperror.ErrNotFound)
+		}
+
+		return nil, fmt.Errorf("find role by id: %w", err)
+	}
+
+	return &role, nil
 }
 
 func (r *repository) FindByName(ctx context.Context, name string) (*model.Role, error) {
