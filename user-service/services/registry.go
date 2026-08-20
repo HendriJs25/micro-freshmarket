@@ -6,12 +6,14 @@ import (
 	"user-service/repository"
 	sessionrepository "user-service/repository/session"
 	jwtservice "user-service/services/jwt"
+	roleservice "user-service/services/role"
 	userservice "user-service/services/user"
 )
 
 type Registry struct {
 	User userservice.Service
 	JWT  jwtservice.Service
+	Role roleservice.Service
 }
 
 func NewRegistry(repositories *repository.Registry, jwtConfig config.JWT, sessionRepository sessionrepository.Repository) (*Registry, error) {
@@ -27,6 +29,7 @@ func NewRegistry(repositories *repository.Registry, jwtConfig config.JWT, sessio
 			repositories.Transaction,
 			jwtService,
 			sessionRepository),
-		JWT: jwtService,
+		JWT:  jwtService,
+		Role: roleservice.NewService(repositories.Role),
 	}, nil
 }

@@ -3,6 +3,7 @@ package routes
 import (
 	"user-service/handler"
 	"user-service/middleware"
+	adminroutes "user-service/routes/admin"
 	healthroutes "user-service/routes/health"
 	userroutes "user-service/routes/user"
 
@@ -26,4 +27,5 @@ func NewRegistry(router *gin.Engine, handlers *handler.Registry, authentication 
 func (r *Registry) Register() {
 	healthroutes.Register(r.router, r.handlers.Health)
 	userroutes.Register(r.router, r.handlers.User, r.authentication)
+	adminroutes.Register(r.router, r.handlers.Admin, r.authentication)
 }
