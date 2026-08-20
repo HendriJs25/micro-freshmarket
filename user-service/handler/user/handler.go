@@ -8,6 +8,7 @@ import (
 	"user-service/common/response"
 	"user-service/domain/dto/request"
 	responsedto "user-service/domain/dto/response"
+	"user-service/middleware"
 	userservice "user-service/services/user"
 
 	"github.com/gin-gonic/gin"
@@ -109,6 +110,38 @@ func (h *Handler) SignIn(c *gin.Context) {
 	})
 }
 
+func (h *Handler) GetProfile(c *gin.Context) {
+	identity, ok := middleware.IdentityFromContext(c)
+	if !ok {
+		log.Printf("profile authenticated identity missing")
+		c.JSON(http.StatusInternalServerError, response.Response{
+			Message: "internal server error",
+			Data:    nil,
+		})
+	}
+
+	profile, err := h.userService.GetProfile(c.Request.Context(), identity.UserID)
+	if err != nil {
+		h.respondGetProfileError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.Response{
+		Message: "success",
+		Data: responsedto.ProfileResponse{
+			RoleName: profile.RoleName,
+			ID:       profile.ID,
+			Name:     profile.Name,
+			Email:    profile.Email,
+			Phone:    profile.Phone,
+			Lat:      profile.Lat,
+			Lng:      profile.Lng,
+			Address:  profile.Address,
+			Photo:    profile.Photo,
+		},
+	})
+}
+
 func (h *Handler) respondSignInError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, apperror.ErrInvalidCredentials):
@@ -168,5 +201,26 @@ func (h *Handler) respondVerifyAccountError(c *gin.Context, err error) {
 			Message: "internal server error",
 			Data:    nil,
 		})
+	}
+}
+
+func (h *Handler) respondGetProfileError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, apperror.ErrNotFound):
+		c.JSON(http.StatusNotFound, response.Response{
+			Message: "user not found",
+			Data:    nil,
+		})
+	case errors.Is(err, apperror.ErrAccountNotVerified):
+		c.JSON(http.StatusForbidden, response.Response{
+			Message: "account not verified",
+			Data:    nil,
+		})
+	default:
+		c.JSON(http.StatusInternalServerError, response.Response{
+			Message: "internal server error",
+			Data:    nil,
+		})
+
 	}
 }

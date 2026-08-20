@@ -10,6 +10,7 @@ import (
 	"user-service/database"
 	"user-service/database/seeders"
 	"user-service/handler"
+	"user-service/middleware"
 	"user-service/repository"
 	sessionrepository "user-service/repository/session"
 	"user-service/routes"
@@ -85,10 +86,11 @@ func run(seed bool) error {
 	if err != nil {
 		return fmt.Errorf("initialize services :%w", err)
 	}
+	authenticationMiddleware := middleware.NewAuthentication(serviceRegistry.JWT, sessionRepository)
 	handlerRegistry := handler.NewRegistry(serviceRegistry)
 
 	router := gin.Default()
-	routeRegistry := routes.NewRegistry(router, handlerRegistry)
+	routeRegistry := routes.NewRegistry(router, handlerRegistry, authenticationMiddleware)
 	routeRegistry.Register()
 
 	log.Printf(
