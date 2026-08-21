@@ -37,7 +37,6 @@ func (r *repository) FindAll(ctx context.Context, search string) ([]model.Role, 
 	if err := query.Order("id asc").Find(&roles).Error; err != nil {
 		return nil, fmt.Errorf("find roles: %w", err)
 	}
-
 	return roles, nil
 }
 
