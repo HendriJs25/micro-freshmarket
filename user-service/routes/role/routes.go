@@ -9,4 +9,5 @@ import (
 func Register(router gin.IRouter, handler *rolehandler.Handler) {
 	router.GET("/roles", handler.GetAll)
 	router.GET("/roles/:id", handler.GetByID)
+	router.POST("/roles", handler.Create)
 }

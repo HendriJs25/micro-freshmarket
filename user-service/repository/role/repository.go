@@ -15,6 +15,7 @@ type repository struct {
 }
 
 type Repository interface {
+	Create(context.Context, *model.Role) error
 	FindAll(context.Context, string) ([]model.Role, error)
 	FindByID(context.Context, int64) (*model.Role, error)
 	FindByName(context.Context, string) (*model.Role, error)
@@ -23,6 +24,20 @@ type Repository interface {
 
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
+}
+
+func (s *repository) Create(ctx context.Context, role *model.Role) error {
+	err := s.db.WithContext(ctx).Create(role).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return fmt.Errorf("create role: %w", apperror.ErrAlreadyExists)
+		}
+
+		return fmt.Errorf("create role: %w", err)
+	}
+
+	return nil
 }
 
 func (r *repository) FindAll(ctx context.Context, search string) ([]model.Role, error) {
