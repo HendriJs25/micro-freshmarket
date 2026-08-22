@@ -8,6 +8,7 @@ import (
 	"strings"
 	apperror "user-service/common/error"
 	"user-service/common/response"
+	"user-service/domain/dto/request"
 	responsedto "user-service/domain/dto/response"
 	roleservice "user-service/services/role"
 
@@ -22,6 +23,32 @@ func NewHandler(roleService roleservice.Service) *Handler {
 	return &Handler{
 		roleService: roleService,
 	}
+}
+
+func (h *Handler) Create(c *gin.Context) {
+	var req request.CreateRoleRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, response.Response{
+			Message: "invalid create role request",
+			Data:    nil,
+		})
+		return
+	}
+
+	err := h.roleService.Create(c.Request.Context(), roleservice.CreateInput{
+		Name: req.Name,
+	})
+
+	if err != nil {
+		h.respondCreateError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, response.Response{
+		Message: "Success",
+		Data:    nil,
+	})
 }
 
 func (h *Handler) GetAll(c *gin.Context) {
@@ -100,5 +127,26 @@ func (h *Handler) respondGetByIDError(c *gin.Context, err error) {
 			Data:    nil,
 		})
 
+	}
+}
+
+func (h *Handler) respondCreateError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, apperror.ErrInvalidArgument):
+		c.JSON(http.StatusUnprocessableEntity, response.Response{
+			Message: "invalid create role request",
+			Data:    nil,
+		})
+	case errors.Is(err, apperror.ErrAlreadyExists):
+		c.JSON(http.StatusConflict, response.Response{
+			Message: "role already exists",
+			Data:    nil,
+		})
+	default:
+		log.Printf("create role failed: %v", err)
+		c.JSON(http.StatusInternalServerError, response.Response{
+			Message: "internal server error",
+			Data:    nil,
+		})
 	}
 }

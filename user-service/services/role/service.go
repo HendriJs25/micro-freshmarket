@@ -5,8 +5,13 @@ import (
 	"fmt"
 	"strings"
 	apperror "user-service/common/error"
+	"user-service/domain/model"
 	rolerepository "user-service/repository/role"
 )
+
+type CreateInput struct {
+	Name string
+}
 
 type Role struct {
 	ID   int64
@@ -18,6 +23,7 @@ type service struct {
 }
 
 type Service interface {
+	Create(context.Context, CreateInput) error
 	GetAll(context.Context, string) ([]Role, error)
 	GetByID(context.Context, int64) (*Role, error)
 }
@@ -26,6 +32,24 @@ func NewService(roleRepository rolerepository.Repository) Service {
 	return &service{
 		roleRepository: roleRepository,
 	}
+}
+
+func (s *service) Create(ctx context.Context, input CreateInput) error {
+	name := strings.TrimSpace(input.Name)
+
+	if name == "" {
+		return fmt.Errorf("%w: role name must not be empty", apperror.ErrInvalidArgument)
+	}
+
+	role := &model.Role{
+		Name: name,
+	}
+
+	if err := s.roleRepository.Create(ctx, role); err != nil {
+		return fmt.Errorf("create role: %w", err)
+	}
+
+	return nil
 }
 
 func (s *service) GetAll(ctx context.Context, search string) ([]Role, error) {
