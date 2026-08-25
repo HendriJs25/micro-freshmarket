@@ -51,6 +51,45 @@ func (h *Handler) Create(c *gin.Context) {
 	})
 }
 
+func (h *Handler) Update(c *gin.Context) {
+	roleIDString := strings.TrimSpace(c.Param("id"))
+
+	roleID, err := strconv.ParseInt(roleIDString, 10, 64)
+
+	if err != nil || roleID <= 0 {
+		c.JSON(http.StatusBadRequest, response.Response{
+			Message: "missing or invalid role id",
+			Data:    nil,
+		})
+		return
+	}
+
+	var req request.UpdateRoleRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, response.Response{
+			Message: "invalid update role request",
+			Data:    nil,
+		})
+		return
+	}
+
+	err = h.roleService.Update(c.Request.Context(), roleservice.UpdateInput{
+		ID:   roleID,
+		Name: req.Name,
+	})
+
+	if err != nil {
+		h.respondUpdateError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.Response{
+		Message: "Role updated successfully",
+		Data:    nil,
+	})
+}
+
 func (h *Handler) GetAll(c *gin.Context) {
 	search := c.Query("search")
 
@@ -144,6 +183,33 @@ func (h *Handler) respondCreateError(c *gin.Context, err error) {
 		})
 	default:
 		log.Printf("create role failed: %v", err)
+		c.JSON(http.StatusInternalServerError, response.Response{
+			Message: "internal server error",
+			Data:    nil,
+		})
+	}
+}
+
+func (h *Handler) respondUpdateError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, apperror.ErrInvalidArgument):
+		c.JSON(http.StatusUnprocessableEntity, response.Response{
+			Message: "invalid update role request",
+			Data:    nil,
+		})
+	case errors.Is(err, apperror.ErrNotFound):
+		c.JSON(http.StatusNotFound, response.Response{
+			Message: "role not found",
+			Data:    nil,
+		})
+	case errors.Is(err, apperror.ErrAlreadyExists):
+		c.JSON(http.StatusConflict, response.Response{
+			Message: "role already exists",
+			Data:    nil,
+		})
+	default:
+		log.Printf("update role failed: %v", err)
+
 		c.JSON(http.StatusInternalServerError, response.Response{
 			Message: "internal server error",
 			Data:    nil,

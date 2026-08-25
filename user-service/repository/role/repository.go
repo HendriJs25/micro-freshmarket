@@ -16,6 +16,7 @@ type repository struct {
 
 type Repository interface {
 	Create(context.Context, *model.Role) error
+	Update(context.Context, int64, string) error
 	FindAll(context.Context, string) ([]model.Role, error)
 	FindByID(context.Context, int64) (*model.Role, error)
 	FindByName(context.Context, string) (*model.Role, error)
@@ -26,8 +27,8 @@ func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }
 
-func (s *repository) Create(ctx context.Context, role *model.Role) error {
-	err := s.db.WithContext(ctx).Create(role).Error
+func (r *repository) Create(ctx context.Context, role *model.Role) error {
+	err := r.db.WithContext(ctx).Create(role).Error
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
@@ -37,6 +38,22 @@ func (s *repository) Create(ctx context.Context, role *model.Role) error {
 		return fmt.Errorf("create role: %w", err)
 	}
 
+	return nil
+}
+
+func (r *repository) Update(ctx context.Context, id int64, roleName string) error {
+	result := r.db.WithContext(ctx).Model(model.Role{}).Where("id = ?", id).Update("name", roleName)
+
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrDuplicatedKey) {
+			return fmt.Errorf("update role name: %w", apperror.ErrAlreadyExists)
+		}
+		return fmt.Errorf("update role name: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("update role name: %w", apperror.ErrNotFound)
+	}
 	return nil
 }
 

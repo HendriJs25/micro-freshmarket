@@ -13,6 +13,11 @@ type CreateInput struct {
 	Name string
 }
 
+type UpdateInput struct {
+	ID   int64
+	Name string
+}
+
 type Role struct {
 	ID   int64
 	Name string
@@ -24,6 +29,7 @@ type service struct {
 
 type Service interface {
 	Create(context.Context, CreateInput) error
+	Update(ctx context.Context, input UpdateInput) error
 	GetAll(context.Context, string) ([]Role, error)
 	GetByID(context.Context, int64) (*Role, error)
 }
@@ -47,6 +53,24 @@ func (s *service) Create(ctx context.Context, input CreateInput) error {
 
 	if err := s.roleRepository.Create(ctx, role); err != nil {
 		return fmt.Errorf("create role: %w", err)
+	}
+
+	return nil
+}
+
+func (s *service) Update(ctx context.Context, input UpdateInput) error {
+	if input.ID <= 0 {
+		return fmt.Errorf("%w: role id must be greater than zero", apperror.ErrInvalidArgument)
+	}
+
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return fmt.Errorf("%w: role name must not be empty", apperror.ErrInvalidArgument)
+	}
+
+	err := s.roleRepository.Update(ctx, input.ID, name)
+	if err != nil {
+		return fmt.Errorf("update role: %w", err)
 	}
 
 	return nil
