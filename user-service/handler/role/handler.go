@@ -147,6 +147,30 @@ func (h *Handler) GetByID(c *gin.Context) {
 	})
 }
 
+func (h *Handler) Delete(c *gin.Context) {
+	roleIDString := strings.TrimSpace(c.Param("id"))
+	roleID, err := strconv.ParseInt(roleIDString, 10, 64)
+
+	if err != nil || roleID <= 0 {
+		c.JSON(http.StatusBadRequest, response.Response{
+			Message: "missing or invalid role id",
+			Data:    nil,
+		})
+		return
+	}
+
+	err = h.roleService.Delete(c.Request.Context(), roleID)
+	if err != nil {
+		h.respondDeleteError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.Response{
+		Message: "Role deleted successfully",
+		Data:    nil,
+	})
+}
+
 func (h *Handler) respondGetByIDError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, apperror.ErrInvalidArgument):
@@ -210,6 +234,32 @@ func (h *Handler) respondUpdateError(c *gin.Context, err error) {
 	default:
 		log.Printf("update role failed: %v", err)
 
+		c.JSON(http.StatusInternalServerError, response.Response{
+			Message: "internal server error",
+			Data:    nil,
+		})
+	}
+}
+
+func (h *Handler) respondDeleteError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, apperror.ErrInvalidArgument):
+		c.JSON(http.StatusUnprocessableEntity, response.Response{
+			Message: "missing or invalid role id",
+			Data:    nil,
+		})
+	case errors.Is(err, apperror.ErrNotFound):
+		c.JSON(http.StatusNotFound, response.Response{
+			Message: "role not found",
+			Data:    nil,
+		})
+	case errors.Is(err, apperror.ErrConflict):
+		c.JSON(http.StatusConflict, response.Response{
+			Message: "role is assigned to users",
+			Data:    nil,
+		})
+	default:
+		log.Printf("delete role failed: %v", err)
 		c.JSON(http.StatusInternalServerError, response.Response{
 			Message: "internal server error",
 			Data:    nil,

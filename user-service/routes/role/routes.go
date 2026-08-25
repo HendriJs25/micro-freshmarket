@@ -11,4 +11,5 @@ func Register(router gin.IRouter, handler *rolehandler.Handler) {
 	router.GET("/roles/:id", handler.GetByID)
 	router.POST("/roles", handler.Create)
 	router.PUT("/roles/:id", handler.Update)
+	router.DELETE("/roles/:id", handler.Delete)
 }

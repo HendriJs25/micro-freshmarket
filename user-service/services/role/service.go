@@ -32,6 +32,7 @@ type Service interface {
 	Update(ctx context.Context, input UpdateInput) error
 	GetAll(context.Context, string) ([]Role, error)
 	GetByID(context.Context, int64) (*Role, error)
+	Delete(context.Context, int64) error
 }
 
 func NewService(roleRepository rolerepository.Repository) Service {
@@ -111,4 +112,16 @@ func (s *service) GetByID(ctx context.Context, id int64) (*Role, error) {
 		Name: modelRole.Name,
 	}, nil
 
+}
+
+func (s *service) Delete(ctx context.Context, id int64) error {
+	if id <= 0 {
+		return fmt.Errorf("%w:role id must be greater than zero", apperror.ErrInvalidArgument)
+	}
+
+	if err := s.roleRepository.DeleteIfUnused(ctx, id); err != nil {
+		return fmt.Errorf("delete role: %w", err)
+	}
+
+	return nil
 }

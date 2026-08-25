@@ -21,6 +21,7 @@ type Repository interface {
 	FindByID(context.Context, int64) (*model.Role, error)
 	FindByName(context.Context, string) (*model.Role, error)
 	FindByUserID(context.Context, int64) ([]model.Role, error)
+	DeleteIfUnused(context.Context, int64) error
 }
 
 func NewRepository(db *gorm.DB) Repository {
@@ -119,4 +120,28 @@ func (r *repository) FindByUserID(ctx context.Context, userID int64) ([]model.Ro
 	}
 
 	return roles, nil
+}
+
+func (r *repository) DeleteIfUnused(ctx context.Context, id int64) error {
+	result := r.db.WithContext(ctx).Where("id = ?", id).
+		Where(`NOT EXISTS (SELECT 1 FROM user_role ur WHERE ur.role_id = roles.id AND ur.deleted_at IS NULL)`).Delete(&model.Role{})
+
+	if result.Error != nil {
+		return fmt.Errorf("delete role: %w", result.Error)
+	}
+
+	if result.RowsAffected > 0 {
+		return nil
+	}
+
+	_, err := r.FindByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, apperror.ErrNotFound) {
+			return fmt.Errorf("delete role: %w", apperror.ErrNotFound)
+		}
+		return fmt.Errorf("check role after failed delete: %w", err)
+	}
+
+	return fmt.Errorf("delete role: %w", apperror.ErrConflict)
+
 }
