@@ -27,7 +27,7 @@ func NewRepository(db *gorm.DB) Repository {
 	}
 }
 
-func (r repository) FindByID(ctx context.Context, id int64) (*model.User, error) {
+func (r *repository) FindByID(ctx context.Context, id int64) (*model.User, error) {
 	var user model.User
 	err := r.db.WithContext(ctx).Where("id = ?", id).First(&user).Error
 
@@ -41,7 +41,7 @@ func (r repository) FindByID(ctx context.Context, id int64) (*model.User, error)
 	return &user, nil
 }
 
-func (r repository) FindByEmail(ctx context.Context, email string) (*model.User, error) {
+func (r *repository) FindByEmail(ctx context.Context, email string) (*model.User, error) {
 	var user model.User
 	err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error
 
@@ -55,7 +55,7 @@ func (r repository) FindByEmail(ctx context.Context, email string) (*model.User,
 	return &user, nil
 }
 
-func (r repository) Create(ctx context.Context, user *model.User) error {
+func (r *repository) Create(ctx context.Context, user *model.User) error {
 	err := r.db.WithContext(ctx).Create(user).Error
 
 	if err != nil {
@@ -67,7 +67,7 @@ func (r repository) Create(ctx context.Context, user *model.User) error {
 	return nil
 }
 
-func (r repository) MarkVerified(ctx context.Context, id int64) error {
+func (r *repository) MarkVerified(ctx context.Context, id int64) error {
 	result := r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", id).Update("is_verified", true)
 
 	if result.Error != nil {

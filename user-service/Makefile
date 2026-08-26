@@ -6,6 +6,9 @@ DB_URL=postgres://$(DATABASE_USER):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATAB
 run:
 	go run ./cmd/main.go
 
+fmt:
+	go fmt ./...
+
 test:
 	go test ./...
 
