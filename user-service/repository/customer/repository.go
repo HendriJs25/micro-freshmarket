@@ -79,7 +79,7 @@ func (r *repository) FindAll(ctx context.Context, query ListQuery) ([]ListItem, 
 					users.name,
 					users.email,
 					users.phone,
-					users.photo,`).
+					users.photo`).
 		Order(clause.OrderByColumn{
 			Column: orderColumn(query.OrderBy),
 			Desc:   query.Desc,
