@@ -2,17 +2,39 @@ package customer
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	apperror "user-service/common/error"
+	"user-service/constants"
+	"user-service/domain/model"
+	"user-service/repository"
 	customerrepository "user-service/repository/customer"
+
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 const (
-	defaultPage  int64 = 1
-	defaultLimit int64 = 10
-	maxLimit     int64 = 100
+	defaultPage          int64 = 1
+	defaultLimit         int64 = 10
+	maxLimit             int64 = 100
+	minimumPasswordBytes       = 8
+	maximumPasswordBytes       = 72
 )
+
+type CreateInput struct {
+	Name     string
+	Email    string
+	Password string
+	Phone    string
+	Address  string
+	Lat      *float64
+	Lng      *float64
+	Photo    string
+	RoleID   int64
+}
 
 type ListInput struct {
 	Search    string
@@ -56,17 +78,92 @@ type ListResult struct {
 
 type service struct {
 	customerRepository customerrepository.Repository
+	transactionManager repository.TransactionManager
 }
 
 type Service interface {
+	Create(context.Context, CreateInput) error
 	GetAll(context.Context, ListInput) (*ListResult, error)
 	GetByID(context.Context, int64) (*Customer, error)
 }
 
-func NewService(customerRepository customerrepository.Repository) Service {
+func NewService(customerRepository customerrepository.Repository, transactionManager repository.TransactionManager) Service {
 	return &service{
 		customerRepository: customerRepository,
+		transactionManager: transactionManager,
 	}
+}
+
+func (s *service) Create(ctx context.Context, input CreateInput) error {
+	name := strings.TrimSpace(input.Name)
+	email := strings.TrimSpace(input.Email)
+	phone := strings.TrimSpace(input.Phone)
+
+	if name == "" || email == "" || phone == "" {
+		return fmt.Errorf("%w: required customer data must not be empty", apperror.ErrInvalidArgument)
+	}
+
+	passwordLength := len([]byte(input.Password))
+
+	if passwordLength < minimumPasswordBytes || passwordLength > maximumPasswordBytes {
+		return fmt.Errorf("%w: password msut be between %d and %d bytes", apperror.ErrInvalidArgument, minimumPasswordBytes, maximumPasswordBytes)
+	}
+
+	if input.RoleID <= 0 {
+		return fmt.Errorf("%w: role_id must be greater than zero", apperror.ErrInvalidArgument)
+	}
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+
+	if err != nil {
+		return fmt.Errorf("hash customer password: %w", err)
+	}
+
+	err = s.transactionManager.WithinTransaction(ctx, func(repositories *repository.Registry) error {
+		customerRole, err := repositories.Role.FindByName(ctx, constants.RoleCustomer)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("%w: customer role is missing", apperror.ErrMisconfigured)
+			}
+
+			return fmt.Errorf("find customer role: %w", err)
+		}
+
+		if input.RoleID != customerRole.ID {
+			return fmt.Errorf("%w: role id must reference Customer role", apperror.ErrInvalidArgument)
+		}
+
+		customer := &model.User{
+			Name:         name,
+			Email:        email,
+			PasswordHash: string(passwordHash),
+			Phone:        optionalString(phone),
+			Address:      optionalString(input.Address),
+			Photo:        optionalString(input.Photo),
+			Lat:          coordinateString(input.Lat),
+			Lng:          coordinateString(input.Lng),
+			IsVerified:   true,
+		}
+
+		if err := repositories.User.Create(ctx, customer); err != nil {
+			return fmt.Errorf("create customer user: %w", err)
+		}
+
+		userRole := &model.UserRole{
+			UserID: customer.ID,
+			RoleID: customerRole.ID,
+		}
+
+		if err := repositories.UserRole.Create(ctx, userRole); err != nil {
+			return fmt.Errorf("assign customer role: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("create customer: %w", err)
+	}
+	return nil
 }
 
 func (s *service) GetAll(ctx context.Context, input ListInput) (*ListResult, error) {
@@ -206,4 +303,22 @@ func normalizeOrderBy(orderBy string) (customerrepository.OrderBy, error) {
 	default:
 		return "", fmt.Errorf("%w: unsupported customer order field", apperror.ErrInvalidArgument)
 	}
+}
+
+func optionalString(value string) *string {
+	value = strings.TrimSpace(value)
+
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func coordinateString(value *float64) *string {
+	if value == nil {
+		return nil
+	}
+
+	result := strconv.FormatFloat(*value, 'g', -1, 64)
+	return &result
 }

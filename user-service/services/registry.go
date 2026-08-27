@@ -33,6 +33,6 @@ func NewRegistry(repositories *repository.Registry, jwtConfig config.JWT, sessio
 			sessionRepository),
 		JWT:      jwtService,
 		Role:     roleservice.NewService(repositories.Role),
-		Customer: customer.NewService(repositories.Customer),
+		Customer: customer.NewService(repositories.Customer, repositories.Transaction),
 	}, nil
 }

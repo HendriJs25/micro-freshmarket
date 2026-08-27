@@ -8,6 +8,7 @@ import (
 	"strings"
 	apperror "user-service/common/error"
 	"user-service/common/response"
+	"user-service/domain/dto/request"
 	responsedto "user-service/domain/dto/response"
 	customerservice "user-service/services/customer"
 
@@ -22,6 +23,40 @@ func NewHandler(customerService customerservice.Service) *Handler {
 	return &Handler{
 		customerService: customerService,
 	}
+}
+
+func (h *Handler) Create(c *gin.Context) {
+	var req request.CreateCustomerRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, response.Response{
+			Message: "invalid create customer request",
+			Data:    nil,
+		})
+		return
+	}
+
+	err := h.customerService.Create(c.Request.Context(), customerservice.CreateInput{
+		Name:     req.Name,
+		Email:    req.Email,
+		Password: req.Password,
+		Phone:    req.Phone,
+		Address:  req.Address,
+		Lat:      req.Lat,
+		Lng:      req.Lng,
+		Photo:    req.Photo,
+		RoleID:   req.RoleID,
+	})
+
+	if err != nil {
+		h.respondCreateError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, response.Response{
+		Message: "success",
+		Data:    nil,
+	})
 }
 
 func (h *Handler) GetAll(c *gin.Context) {
@@ -144,6 +179,27 @@ func (h *Handler) respondGetByID(c *gin.Context, err error) {
 		})
 	default:
 		log.Printf("get customer by id failed: %v", err)
+		c.JSON(http.StatusInternalServerError, response.Response{
+			Message: "internal server error",
+			Data:    nil,
+		})
+	}
+}
+
+func (h *Handler) respondCreateError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, apperror.ErrInvalidArgument):
+		c.JSON(http.StatusUnprocessableEntity, response.Response{
+			Message: "invalid create customer request",
+			Data:    nil,
+		})
+	case errors.Is(err, apperror.ErrAlreadyExists):
+		c.JSON(http.StatusConflict, response.Response{
+			Message: "customer already exists",
+			Data:    nil,
+		})
+	default:
+		log.Printf("create customer failed: %v", err)
 		c.JSON(http.StatusInternalServerError, response.Response{
 			Message: "internal server error",
 			Data:    nil,
