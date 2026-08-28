@@ -11,6 +11,7 @@ import (
 	"user-service/domain/model"
 	"user-service/repository"
 	customerrepository "user-service/repository/customer"
+	sessionrepository "user-service/repository/session"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -93,6 +94,7 @@ type ListResult struct {
 type service struct {
 	customerRepository customerrepository.Repository
 	transactionManager repository.TransactionManager
+	sessionRepository  sessionrepository.Repository
 }
 
 type Service interface {
@@ -100,12 +102,14 @@ type Service interface {
 	GetAll(context.Context, ListInput) (*ListResult, error)
 	GetByID(context.Context, int64) (*Customer, error)
 	Update(context.Context, UpdateInput) error
+	Delete(context.Context, int64) error
 }
 
-func NewService(customerRepository customerrepository.Repository, transactionManager repository.TransactionManager) Service {
+func NewService(customerRepository customerrepository.Repository, transactionManager repository.TransactionManager, sessionRepository sessionrepository.Repository) Service {
 	return &service{
 		customerRepository: customerRepository,
 		transactionManager: transactionManager,
+		sessionRepository:  sessionRepository,
 	}
 }
 
@@ -275,6 +279,40 @@ func (s *service) Update(ctx context.Context, input UpdateInput) error {
 		Lng:     coordinateString(input.Lng),
 	}); err != nil {
 		return fmt.Errorf("update customer: %w", err)
+	}
+	return nil
+}
+
+func (s *service) Delete(ctx context.Context, userID int64) error {
+	if userID <= 0 {
+		return fmt.Errorf("%w: userID must be greater than zero", apperror.ErrInvalidArgument)
+	}
+
+	_, err := s.customerRepository.FindByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("find customer before delete: %w", err)
+	}
+
+	if err := s.sessionRepository.DeleteByUserID(ctx, userID); err != nil {
+		return fmt.Errorf("revoke customer sessions: %w", err)
+	}
+
+	err = s.transactionManager.WithinTransaction(ctx, func(repositories *repository.Registry) error {
+		if err := repositories.Customer.Delete(ctx, userID); err != nil {
+			return fmt.Errorf("delete customer user: %w", err)
+		}
+
+		if err := repositories.UserRole.DeleteByUserID(ctx, userID); err != nil {
+			return fmt.Errorf("delete customer roles: %w", err)
+		}
+
+		if err := repositories.VerificationToken.DeleteByUserID(ctx, userID); err != nil {
+			return fmt.Errorf("delete verification token: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("delete customer: %w", err)
 	}
 	return nil
 }

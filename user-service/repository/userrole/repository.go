@@ -16,6 +16,7 @@ type repository struct {
 
 type Repository interface {
 	Create(context.Context, *model.UserRole) error
+	DeleteByUserID(context.Context, int64) error
 }
 
 func NewRepository(db *gorm.DB) Repository {
@@ -34,5 +35,16 @@ func (r *repository) Create(ctx context.Context, userRole *model.UserRole) error
 		return fmt.Errorf("create user role: %w", err)
 	}
 
+	return nil
+}
+
+func (r *repository) DeleteByUserID(ctx context.Context, userID int64) error {
+	if userID <= 0 {
+		return fmt.Errorf("%w: user id must be greater than zero", apperror.ErrInvalidArgument)
+	}
+
+	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).Delete(&model.UserRole{}).Error; err != nil {
+		return fmt.Errorf("delete user role by user id: %w", err)
+	}
 	return nil
 }

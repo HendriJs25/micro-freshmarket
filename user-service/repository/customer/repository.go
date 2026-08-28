@@ -70,6 +70,7 @@ type Repository interface {
 	FindAll(context.Context, ListQuery) ([]ListItem, int64, error)
 	FindByID(context.Context, int64) (*Detail, error)
 	Update(context.Context, int64, UpdateFields) error
+	Delete(context.Context, int64) error
 }
 
 func NewRepository(db *gorm.DB) Repository {
@@ -204,6 +205,26 @@ func (r *repository) customerQuery(ctx context.Context, search string) *gorm.DB 
 	}
 
 	return query
+}
+
+func (r *repository) Delete(ctx context.Context, id int64) error {
+	result := r.db.WithContext(ctx).Where("id = ?", id).
+		Where(`EXISTS (
+					SELECT 1
+					FROM user_role ur 
+					JOIN roles r ON r.id = ur.role_id 
+					AND r.deleted_at IS NULL 
+					WHERE ur.user_id = users.id 
+					AND ur.deleted_at IS NULL 
+					AND r.name = ?)`, constants.RoleCustomer).Delete(&model.User{})
+	if result.Error != nil {
+		return fmt.Errorf("delete customer: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("delete customer: %w", apperror.ErrNotFound)
+	}
+
+	return nil
 }
 
 func orderColumn(orderBy OrderBy) clause.Column {

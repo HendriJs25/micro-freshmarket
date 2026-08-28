@@ -177,6 +177,29 @@ func (h *Handler) Update(c *gin.Context) {
 	})
 }
 
+func (h *Handler) Delete(c *gin.Context) {
+	customerIDString := strings.TrimSpace(c.Param("id"))
+	customerID, err := strconv.ParseInt(customerIDString, 10, 64)
+
+	if err != nil || customerID <= 0 {
+		c.JSON(http.StatusBadRequest, response.Response{
+			Message: "missing or invalid customer ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	err = h.customerService.Delete(c.Request.Context(), customerID)
+	if err != nil {
+		h.respondDeleteError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, response.Response{
+		Message: "Customer deleted successfully",
+		Data:    nil,
+	})
+}
+
 func parseOptionalPositiveInt64(value string) int64 {
 	value = strings.TrimSpace(value)
 
@@ -269,6 +292,27 @@ func (h *Handler) respondUpdateError(c *gin.Context, err error) {
 		})
 	default:
 		log.Printf("update customer failed: %v", err)
+		c.JSON(http.StatusInternalServerError, response.Response{
+			Message: "internal server error",
+			Data:    nil,
+		})
+	}
+}
+
+func (h *Handler) respondDeleteError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, apperror.ErrInvalidArgument):
+		c.JSON(http.StatusBadRequest, response.Response{
+			Message: "missing or invalid customer ID",
+			Data:    nil,
+		})
+	case errors.Is(err, apperror.ErrNotFound):
+		c.JSON(http.StatusNotFound, response.Response{
+			Message: "customer not found",
+			Data:    nil,
+		})
+	default:
+		log.Printf("delete customer failed: %v", err)
 		c.JSON(http.StatusInternalServerError, response.Response{
 			Message: "internal server error",
 			Data:    nil,
