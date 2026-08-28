@@ -18,6 +18,7 @@ type Repository interface {
 	Create(context.Context, *model.VerificationToken) error
 	FindByToken(context.Context, string) (*model.VerificationToken, error)
 	DeleteByID(context.Context, int64) error
+	DeleteByUserID(context.Context, int64) error
 }
 
 func NewRepository(db *gorm.DB) Repository {
@@ -62,6 +63,18 @@ func (r *repository) DeleteByID(ctx context.Context, id int64) error {
 
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("delete verification token: %w", apperror.ErrNotFound)
+	}
+
+	return nil
+}
+
+func (r *repository) DeleteByUserID(ctx context.Context, userID int64) error {
+	if userID <= 0 {
+		return fmt.Errorf("%w: user id must be greater than zero", apperror.ErrInvalidArgument)
+	}
+
+	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).Delete(&model.VerificationToken{}).Error; err != nil {
+		return fmt.Errorf("delete verification token: %w", err)
 	}
 
 	return nil
