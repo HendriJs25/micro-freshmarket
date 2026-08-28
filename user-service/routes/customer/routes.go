@@ -10,4 +10,5 @@ func Register(router gin.IRouter, handler *customerhandler.Handler) {
 	router.GET("/customers", handler.GetAll)
 	router.GET("/customers/:id", handler.GetByID)
 	router.POST("/customers", handler.Create)
+	router.PUT("/customers/:id", handler.Update)
 }

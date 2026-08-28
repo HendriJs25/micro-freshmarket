@@ -6,6 +6,7 @@ import (
 	"fmt"
 	apperror "user-service/common/error"
 	"user-service/constants"
+	"user-service/domain/model"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -50,6 +51,17 @@ type Detail struct {
 	Lng     *string
 }
 
+type UpdateFields struct {
+	Name  string
+	Email string
+	Phone string
+
+	Address *string
+	Photo   *string
+	Lat     *string
+	Lng     *string
+}
+
 type repository struct {
 	db *gorm.DB
 }
@@ -57,6 +69,7 @@ type repository struct {
 type Repository interface {
 	FindAll(context.Context, ListQuery) ([]ListItem, int64, error)
 	FindByID(context.Context, int64) (*Detail, error)
+	Update(context.Context, int64, UpdateFields) error
 }
 
 func NewRepository(db *gorm.DB) Repository {
@@ -125,6 +138,53 @@ func (r *repository) FindByID(ctx context.Context, id int64) (*Detail, error) {
 	}
 
 	return &customer, nil
+}
+
+func (r *repository) Update(ctx context.Context, id int64, updateFields UpdateFields) error {
+	updates := map[string]any{
+		"name":  updateFields.Name,
+		"email": updateFields.Email,
+		"phone": updateFields.Phone,
+	}
+
+	if updateFields.Address != nil {
+		updates["address"] = updateFields.Address
+	}
+
+	if updateFields.Photo != nil {
+		updates["photo"] = updateFields.Photo
+	}
+
+	if updateFields.Lat != nil {
+		updates["lat"] = updateFields.Lat
+	}
+
+	if updateFields.Lng != nil {
+		updates["lng"] = updateFields.Lng
+	}
+
+	result := r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", id).
+		Where(`EXISTS (
+					SELECT 1 
+					FROM user_role ur 
+					JOIN roles r 
+					ON r.id = ur.role_id 
+					AND r.deleted_at IS NULL 
+					WHERE ur.user_id = users.id 
+					AND ur.deleted_at IS NULL 
+					AND r.name = ?)`, constants.RoleCustomer).Updates(updates)
+
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrDuplicatedKey) {
+			return fmt.Errorf("update customer: %w", apperror.ErrAlreadyExists)
+		}
+		return fmt.Errorf("update customer: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("update customer: %w", apperror.ErrNotFound)
+	}
+	return nil
 }
 
 func (r *repository) customerQuery(ctx context.Context, search string) *gorm.DB {
