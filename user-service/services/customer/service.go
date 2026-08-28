@@ -44,6 +44,20 @@ type ListInput struct {
 	OrderType string
 }
 
+type UpdateInput struct {
+	ID int64
+
+	Name  string
+	Email string
+	Phone string
+
+	Address *string
+	Photo   *string
+
+	Lat *float64
+	Lng *float64
+}
+
 type CustomerListItem struct {
 	ID    int64
 	Name  string
@@ -85,6 +99,7 @@ type Service interface {
 	Create(context.Context, CreateInput) error
 	GetAll(context.Context, ListInput) (*ListResult, error)
 	GetByID(context.Context, int64) (*Customer, error)
+	Update(context.Context, UpdateInput) error
 }
 
 func NewService(customerRepository customerrepository.Repository, transactionManager repository.TransactionManager) Service {
@@ -237,6 +252,33 @@ func (s *service) GetByID(ctx context.Context, id int64) (*Customer, error) {
 	}, nil
 }
 
+func (s *service) Update(ctx context.Context, input UpdateInput) error {
+	if input.ID <= 0 {
+		return fmt.Errorf("%w: customer id must be greater than zero", apperror.ErrInvalidArgument)
+	}
+
+	name := strings.TrimSpace(input.Name)
+	email := strings.TrimSpace(input.Email)
+	phone := strings.TrimSpace(input.Phone)
+
+	if name == "" || email == "" || phone == "" {
+		return fmt.Errorf("%w: name, email and phone are required", apperror.ErrInvalidArgument)
+	}
+
+	if err := s.customerRepository.Update(ctx, input.ID, customerrepository.UpdateFields{
+		Name:    name,
+		Email:   email,
+		Phone:   phone,
+		Address: normalizeOptionalString(input.Address),
+		Photo:   normalizeOptionalString(input.Photo),
+		Lat:     coordinateString(input.Lat),
+		Lng:     coordinateString(input.Lng),
+	}); err != nil {
+		return fmt.Errorf("update customer: %w", err)
+	}
+	return nil
+}
+
 func calculateTotalPage(totalCount int64, perPage int64) int64 {
 	if totalCount == 0 {
 		return 0
@@ -303,6 +345,15 @@ func normalizeOrderBy(orderBy string) (customerrepository.OrderBy, error) {
 	default:
 		return "", fmt.Errorf("%w: unsupported customer order field", apperror.ErrInvalidArgument)
 	}
+}
+
+func normalizeOptionalString(value *string) *string {
+	if value == nil {
+		return nil
+	}
+
+	normalized := strings.TrimSpace(*value)
+	return &normalized
 }
 
 func optionalString(value string) *string {

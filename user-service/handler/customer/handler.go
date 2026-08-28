@@ -134,6 +134,49 @@ func (h *Handler) GetByID(c *gin.Context) {
 	})
 }
 
+func (h *Handler) Update(c *gin.Context) {
+	customerIDString := strings.TrimSpace(c.Param("id"))
+	customerID, err := strconv.ParseInt(customerIDString, 10, 64)
+	if err != nil || customerID <= 0 {
+		c.JSON(http.StatusBadRequest, response.Response{
+			Message: "missing or invalid customer ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	var req request.UpdateCustomerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, response.Response{
+			Message: "invalid update customer request",
+			Data:    nil,
+		})
+		return
+	}
+
+	err = h.customerService.Update(c.Request.Context(), customerservice.UpdateInput{
+		ID:    customerID,
+		Name:  req.Name,
+		Email: req.Email,
+		Phone: req.Phone,
+
+		Address: req.Address,
+		Lat:     req.Lat,
+		Lng:     req.Lng,
+		Photo:   req.Photo,
+	})
+
+	if err != nil {
+		h.respondUpdateError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.Response{
+		Message: "success",
+		Data:    nil,
+	})
+}
+
 func parseOptionalPositiveInt64(value string) int64 {
 	value = strings.TrimSpace(value)
 
@@ -200,6 +243,32 @@ func (h *Handler) respondCreateError(c *gin.Context, err error) {
 		})
 	default:
 		log.Printf("create customer failed: %v", err)
+		c.JSON(http.StatusInternalServerError, response.Response{
+			Message: "internal server error",
+			Data:    nil,
+		})
+	}
+}
+
+func (h *Handler) respondUpdateError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, apperror.ErrInvalidArgument):
+		c.JSON(http.StatusBadRequest, response.Response{
+			Message: "invalid update customer request",
+			Data:    nil,
+		})
+	case errors.Is(err, apperror.ErrNotFound):
+		c.JSON(http.StatusNotFound, response.Response{
+			Message: "customer not found",
+			Data:    nil,
+		})
+	case errors.Is(err, apperror.ErrAlreadyExists):
+		c.JSON(http.StatusConflict, response.Response{
+			Message: "customer already exists",
+			Data:    nil,
+		})
+	default:
+		log.Printf("update customer failed: %v", err)
 		c.JSON(http.StatusInternalServerError, response.Response{
 			Message: "internal server error",
 			Data:    nil,
